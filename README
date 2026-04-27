@@ -1,0 +1,7 @@
+# FujitsuAC for HomeKit #
+
+This is a fork of https://github.com/Benas09/FujitsuAC which uses HomeSpan to add native HomeKit support.
+
+This repository is just a work in progress while I sort out some issues with my own AC units. 
+
+See the original repository for details on building ESP32 hardware to work with this software. Because of the increased memory needs of HomeSpan, you'll need to allocate at least 2mb of flash to the software, which may prevent OTA updates from working. 
