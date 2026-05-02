@@ -9,6 +9,7 @@
 */
 
 #include "FujitsuAC.h"
+#include <WiFi.h>
 
 #define VERSION "2.0.0"
 
@@ -41,9 +42,12 @@ namespace FujitsuAC {
             homeSpan.setControlPin(controlPin);
         }
 
-    #if FUJITSU_ENABLE_OTA
+        // If no credentials are stored, HomeSpan auto-starts setup AP.
+        homeSpan.enableAutoStartAP();
+
+    // #if FUJITSU_ENABLE_OTA
         homeSpan.enableOTA();
-    #endif
+    // #endif
         Serial.println(F("Starting HomeSpan..."));
         homeSpan.begin(
             Category::AirConditioners,
@@ -51,6 +55,10 @@ namespace FujitsuAC {
             "FujitsuAC",
             "fAir"
         );
+
+        bootTimeMs          = millis();
+        wifiConnected       = false;
+        apFallbackTriggered = false;
 
         // ── Create HomeKit accessories ────────────────────────────
         bridge = new HomeSpanBridge(controller, deviceName.c_str(), VERSION);
@@ -74,6 +82,24 @@ namespace FujitsuAC {
 
     void FujitsuAC::loop() {
         homeSpan.poll();
+
+        if (!wifiConnected && WiFi.status() == WL_CONNECTED) {
+            wifiConnected = true;
+        }
+
+        if (!wifiConnected && !apFallbackTriggered && millis() >= bootTimeMs) {
+            auto [status, statusDurationSec] = homeSpan.getStatus();
+
+            if (
+                status == HS_WIFI_CONNECTING &&
+                statusDurationSec >= WIFI_CONNECT_FALLBACK_TIMEOUT_SEC
+            ) {
+                Serial.println(F("WiFi connect timeout - starting HomeSpan setup AP..."));
+                homeSpan.processSerialCommand("A");
+                apFallbackTriggered = true;
+            }
+        }
+
         controller.loop();
         
     }

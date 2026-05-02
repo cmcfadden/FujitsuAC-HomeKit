@@ -37,13 +37,14 @@
 
 // Flash size profile (defaults are set in FujitsuAC.h).
 // Turn these to 1 if you need the extra HomeKit accessories/features.
-#define FUJITSU_ENABLE_OTA              0
+#define FUJITSU_ENABLE_OTA              1
 #define FUJITSU_ENABLE_SERIAL_DEBUG     1
 #define FUJITSU_ENABLE_OUTDOOR_TEMP     1
 #define FUJITSU_ENABLE_FEATURE_SWITCHES 1
 #define FUJITSU_ENABLE_VANES            1
 
 #include <FujitsuAC.h>
+
 
 // ── UART pins (AC unit communication) ─────────────────────────
 #define RXD2 16

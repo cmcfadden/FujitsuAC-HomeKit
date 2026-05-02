@@ -66,6 +66,11 @@ namespace FujitsuAC {
 
         int statusLedPin;
         int controlPin;
+        uint32_t bootTimeMs          = 0;
+        bool     wifiConnected       = false;
+        bool     apFallbackTriggered = false;
+
+        static constexpr uint32_t WIFI_CONNECT_FALLBACK_TIMEOUT_SEC = 90;
 
         void loadConfig();
     };
