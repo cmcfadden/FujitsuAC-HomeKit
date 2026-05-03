@@ -56,12 +56,13 @@ namespace FujitsuAC {
         SpanCharacteristic *active;
         SpanCharacteristic *speed;
         SpanCharacteristic *swing;
+        bool exposeSwing;
 
         uint16_t lastPower = 0xFFFF;
         uint16_t lastFan   = 0xFFFF;
         uint16_t lastSwing = 0xFFFF;
 
-        FujitsuFan(FujitsuController *ctrl);
+        FujitsuFan(FujitsuController *ctrl, bool enableSwing = true);
         boolean update() override;
         void loop() override;
 
@@ -99,23 +100,32 @@ namespace FujitsuAC {
         void loop() override;
     };
 
-    // ─── Vane Position (as Lightbulb brightness) ───────────────────
-    // HomeKit has no native "vane position" type.  We abuse a
-    // Lightbulb's Brightness (0-100 %) mapped to positions 1-6.
-    // Off = swing mode, 1-100 maps to positions.
+    // ─── Vane Position (as Fan speed) ───────────────────────────────
+    // HomeKit has no native "vane position" type.
+    // We expose it as a second Fan:
+    //   Active(0/1) = swing off/on
+    //   RotationSpeed(0-100 %) mapped to positions 1-4, with 100 as swing
 
-    struct FujitsuVane : Service::LightBulb {
+    struct FujitsuVane : Service::Fan {
 
         FujitsuController *controller;
         bool isVertical;
 
-        SpanCharacteristic *on;
-        SpanCharacteristic *brightness;
+        SpanCharacteristic *active;
+        SpanCharacteristic *speed;
         uint16_t lastAirflow = 0xFFFF;
+        uint16_t pendingAirflow = 0xFFFF;
+        uint32_t pendingSinceMs = 0;
 
         FujitsuVane(FujitsuController *ctrl, bool vertical);
         boolean update() override;
         void loop() override;
+
+        static bool isSwingPercent(int pct);
+        static bool isSwingAirflow(uint16_t raw);
+        static int rotationFromAirflow(uint16_t raw);
+        static Enums::VerticalAirflow verticalAirflowFromRotation(int pct);
+        static Enums::HorizontalAirflow horizontalAirflowFromRotation(int pct);
     };
 
     // ─── Bridge Coordinator ────────────────────────────────────────

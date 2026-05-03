@@ -166,29 +166,43 @@ namespace FujitsuAC {
     //  Fan
     // ═══════════════════════════════════════════════════════════════
 
-    FujitsuFan::FujitsuFan(FujitsuController *ctrl)
+    FujitsuFan::FujitsuFan(FujitsuController *ctrl, bool enableSwing)
         : Service::Fan()
     {
         controller = ctrl;
+        exposeSwing = enableSwing;
 
         active = new Characteristic::Active(0);
         speed  = new Characteristic::RotationSpeed(0);
-        speed->setRange(0, 100, 20);          // 0,20,40,60,80,100 → 5 named speeds + auto
-        swing  = new Characteristic::SwingMode(0);
+        speed->setRange(0, 80, 20);           // 0,20,40,60,80 → Auto / Quiet / Low / Medium / High
+        swing = nullptr;
+        if (exposeSwing) {
+            swing = new Characteristic::SwingMode(0);
+        }
     }
 
     boolean FujitsuFan::update() {
+        bool speedChanged = speed->updated();
+        int speedPct = 0;
+
+        if (speedChanged) {
+            speedPct = speed->getNewVal();
+            controller->setFanSpeed(speedFromRotation(speedPct));
+        }
+
         if (active->updated()) {
             int val = active->getNewVal();
-            controller->setPower(val ? Enums::Power::On : Enums::Power::Off);
+
+            // Some Home clients send Active=0 when RotationSpeed is set to 0.
+            // For this accessory, speed 0 is Auto, so keep power on in that case.
+            if (!val && speedChanged && speedPct == 0) {
+                controller->setPower(Enums::Power::On);
+            } else {
+                controller->setPower(val ? Enums::Power::On : Enums::Power::Off);
+            }
         }
 
-        if (speed->updated()) {
-            int pct = speed->getNewVal();
-            controller->setFanSpeed(speedFromRotation(pct));
-        }
-
-        if (swing->updated()) {
+        if (swing && swing->updated()) {
             int val = swing->getNewVal();
             controller->setVerticalSwing(
                 val ? Enums::VerticalSwing::On : Enums::VerticalSwing::Off
@@ -211,11 +225,14 @@ namespace FujitsuAC {
         }
 
         if (fr && fr->value != lastFan) {
-            lastFan = fr->value;
-            speed->setVal(rotationFromSpeed(fr->value));
+            int pct = rotationFromSpeed(fr->value);
+            if (pct >= 0) {
+                lastFan = fr->value;
+                speed->setVal(pct);
+            }
         }
 
-        if (sr && sr->value != lastSwing) {
+        if (swing && sr && sr->value != lastSwing) {
             lastSwing = sr->value;
             swing->setVal(
                 sr->value == static_cast<uint16_t>(Enums::VerticalSwing::On) ? 1 : 0
@@ -238,7 +255,7 @@ namespace FujitsuAC {
             case Enums::FanSpeed::Low:    return 40;
             case Enums::FanSpeed::Medium: return 60;
             case Enums::FanSpeed::High:   return 80;
-            default:                      return 0;
+            default:                      return -1;
         }
     }
 
@@ -319,49 +336,48 @@ namespace FujitsuAC {
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  Vane Position (Lightbulb brightness hack)
+    //  Vane Position (Fan service hack)
     // ═══════════════════════════════════════════════════════════════
 
     FujitsuVane::FujitsuVane(FujitsuController *ctrl, bool vertical)
-        : Service::LightBulb()
+        : Service::Fan()
     {
         controller = ctrl;
         isVertical = vertical;
 
-        on = new Characteristic::On(false);
-        brightness = new Characteristic::Brightness(50);
-        brightness->setRange(0, 100, 17);   // ~6 steps for 6 positions
+        active = new Characteristic::Active(0);
+        speed = new Characteristic::RotationSpeed(50);
+        speed->setRange(0, 100, 25);   // 0,25,50,75 = positions 1-4, 100 = swing
     }
 
     boolean FujitsuVane::update() {
-        if (on->updated()) {
-            bool val = on->getNewVal();
+        // Active toggle is ignored for commands — vane position is
+        // controlled entirely through the speed slider.
+        // HomeKit sends Active=1 alongside speed changes; if we
+        // mapped Active→swing here it would race with the speed
+        // handler and cause the unit to enter swing mode briefly
+        // before the position command arrives (the "position 32" bug).
 
-            if (isVertical) {
-                controller->setVerticalSwing(
-                    val ? Enums::VerticalSwing::On : Enums::VerticalSwing::Off
-                );
+        if (speed->updated()) {
+            int pct = speed->getNewVal();
+
+            // 100% = swing mode; everything else = fixed position.
+            // NOTE: The controller has a single-use send queue — only one
+            // command can be queued per loop tick.  setVerticalAirflow()
+            // already sends swing=Off + position in one atomic batch,
+            // so we must NOT call setVerticalSwing separately here.
+            if (isSwingPercent(pct)) {
+                if (isVertical) {
+                    controller->setVerticalSwing(Enums::VerticalSwing::On);
+                } else {
+                    controller->setHorizontalSwing(Enums::HorizontalSwing::On);
+                }
             } else {
-                controller->setHorizontalSwing(
-                    val ? Enums::HorizontalSwing::On : Enums::HorizontalSwing::Off
-                );
-            }
-        }
-
-        if (brightness->updated()) {
-            int pct = brightness->getNewVal();
-
-            // Map 0-100 → position 1-6
-            int pos = 1 + (pct * 5) / 100;
-            if (pos < 1) pos = 1;
-            if (pos > 6) pos = 6;
-
-            auto position = static_cast<Enums::VerticalAirflow>(pos);
-
-            if (isVertical) {
-                controller->setVerticalAirflow(static_cast<Enums::VerticalAirflow>(pos));
-            } else {
-                controller->setHorizontalAirflow(static_cast<Enums::HorizontalAirflow>(pos));
+                if (isVertical) {
+                    controller->setVerticalAirflow(verticalAirflowFromRotation(pct));
+                } else {
+                    controller->setHorizontalAirflow(horizontalAirflowFromRotation(pct));
+                }
             }
         }
 
@@ -369,20 +385,99 @@ namespace FujitsuAC {
     }
 
     void FujitsuVane::loop() {
+        static const uint32_t kDebounceMs = 2000;
+
         Address addr = isVertical ? Address::VerticalAirflow : Address::HorizontalAirflow;
         Register *r = controller->getRegister(addr);
 
-        if (r && r->value != lastAirflow) {
-            lastAirflow = r->value;
+        if (!r) {
+            return;
+        }
 
-            uint16_t raw = r->value;
-            if (raw == static_cast<uint16_t>(Enums::VerticalAirflow::Swing)) {
-                on->setVal(true);
-            } else if (raw >= 1 && raw <= 6) {
-                on->setVal(false);
-                int pct = ((raw - 1) * 100) / 5;
-                brightness->setVal(pct);
+        uint16_t raw = r->value;
+
+        if (raw != pendingAirflow) {
+            pendingAirflow = raw;
+            pendingSinceMs = millis();
+            return;
+        }
+
+        if (raw == lastAirflow) {
+            return;
+        }
+
+        if ((millis() - pendingSinceMs) < kDebounceMs) {
+            return;
+        }
+
+        lastAirflow = raw;
+
+        if (isSwingAirflow(raw)) {
+            active->setVal(1);
+            speed->setVal(100);
+        } else {
+            int pct = rotationFromAirflow(raw);
+            if (pct < 0) {
+                return;
             }
+
+            active->setVal(1);
+            speed->setVal(pct);
+        }
+    }
+
+    bool FujitsuVane::isSwingPercent(int pct) {
+        return pct >= 100;
+    }
+
+    bool FujitsuVane::isSwingAirflow(uint16_t raw) {
+        return raw == static_cast<uint16_t>(Enums::VerticalAirflow::Swing);
+    }
+
+    int FujitsuVane::rotationFromAirflow(uint16_t raw) {
+        switch (static_cast<Enums::VerticalAirflow>(raw)) {
+            case Enums::VerticalAirflow::Position1:
+                return 0;
+            case Enums::VerticalAirflow::Position2:
+                return 25;
+            case Enums::VerticalAirflow::Position3:
+                return 50;
+            case Enums::VerticalAirflow::Position4:
+                return 75;
+            default:
+                return -1;
+        }
+    }
+
+    Enums::VerticalAirflow FujitsuVane::verticalAirflowFromRotation(int pct) {
+        int clamped = pct;
+        if (clamped < 0) clamped = 0;
+        if (clamped > 99) clamped = 99;
+
+        int bucket = (clamped + 12) / 25;
+
+        switch (bucket) {
+            case 0:
+                return Enums::VerticalAirflow::Position1;
+            case 1:
+                return Enums::VerticalAirflow::Position2;
+            case 2:
+                return Enums::VerticalAirflow::Position3;
+            default:
+                return Enums::VerticalAirflow::Position4;
+        }
+    }
+
+    Enums::HorizontalAirflow FujitsuVane::horizontalAirflowFromRotation(int pct) {
+        switch (verticalAirflowFromRotation(pct)) {
+            case Enums::VerticalAirflow::Position1:
+                return Enums::HorizontalAirflow::Position1;
+            case Enums::VerticalAirflow::Position2:
+                return Enums::HorizontalAirflow::Position2;
+            case Enums::VerticalAirflow::Position3:
+                return Enums::HorizontalAirflow::Position3;
+            default:
+                return Enums::HorizontalAirflow::Position4;
         }
     }
 
@@ -412,7 +507,8 @@ namespace FujitsuAC {
                 new Characteristic::FirmwareRevision(version);
 
             new FujitsuThermostat(&controller);
-            new FujitsuFan(&controller);
+            new FujitsuFan(&controller, false);
+            new FujitsuVane(&controller, true);
 
 #if FUJITSU_ENABLE_OUTDOOR_TEMP
         // ── Accessory 2: Outdoor Temperature ──────────────────────
@@ -450,23 +546,23 @@ namespace FujitsuAC {
         }
 #endif
 
-#if FUJITSU_ENABLE_VANES
+// #if FUJITSU_ENABLE_VANES
         // ── Accessory: Vertical Vane ──────────────────────────────
-        new SpanAccessory();
-            new Service::AccessoryInformation();
-                new Characteristic::Identify();
-                new Characteristic::Name("Vertical Vane");
+        // new SpanAccessory();
+        //     new Service::AccessoryInformation();
+        //         new Characteristic::Identify();
+        //         new Characteristic::Name("Vertical Vane");
 
-            new FujitsuVane(&controller, true);
+        //     new FujitsuVane(&controller, true);
 
         // ── Accessory: Horizontal Vane ────────────────────────────
-        new SpanAccessory();
-            new Service::AccessoryInformation();
-                new Characteristic::Identify();
-                new Characteristic::Name("Horizontal Vane");
+        // new SpanAccessory();
+        //     new Service::AccessoryInformation();
+        //         new Characteristic::Identify();
+        //         new Characteristic::Name("Horizontal Vane");
 
-            new FujitsuVane(&controller, false);
-#endif
+        //     new FujitsuVane(&controller, false);
+// #endif
     }
 
 }
