@@ -347,7 +347,7 @@ namespace FujitsuAC {
 
         active = new Characteristic::Active(0);
         speed = new Characteristic::RotationSpeed(50);
-        speed->setRange(0, 100, 25);   // 0,25,50,75 = positions 1-4, 100 = swing
+        speed->setRange(0, 100, 25);   // 0,25,50,75 = positions 1-4, 0 = swing
     }
 
     boolean FujitsuVane::update() {
@@ -414,7 +414,7 @@ namespace FujitsuAC {
 
         if (isSwingAirflow(raw)) {
             active->setVal(1);
-            speed->setVal(100);
+            speed->setVal(0);
         } else {
             int pct = rotationFromAirflow(raw);
             if (pct < 0) {
@@ -427,7 +427,7 @@ namespace FujitsuAC {
     }
 
     bool FujitsuVane::isSwingPercent(int pct) {
-        return pct >= 100;
+        return pct <= 0;
     }
 
     bool FujitsuVane::isSwingAirflow(uint16_t raw) {
@@ -437,13 +437,13 @@ namespace FujitsuAC {
     int FujitsuVane::rotationFromAirflow(uint16_t raw) {
         switch (static_cast<Enums::VerticalAirflow>(raw)) {
             case Enums::VerticalAirflow::Position1:
-                return 0;
-            case Enums::VerticalAirflow::Position2:
                 return 25;
-            case Enums::VerticalAirflow::Position3:
+            case Enums::VerticalAirflow::Position2:
                 return 50;
-            case Enums::VerticalAirflow::Position4:
+            case Enums::VerticalAirflow::Position3:
                 return 75;
+            case Enums::VerticalAirflow::Position4:
+                return 100;
             default:
                 return -1;
         }
@@ -457,11 +457,11 @@ namespace FujitsuAC {
         int bucket = (clamped + 12) / 25;
 
         switch (bucket) {
-            case 0:
-                return Enums::VerticalAirflow::Position1;
             case 1:
-                return Enums::VerticalAirflow::Position2;
+                return Enums::VerticalAirflow::Position1;
             case 2:
+                return Enums::VerticalAirflow::Position2;
+            case 3:
                 return Enums::VerticalAirflow::Position3;
             default:
                 return Enums::VerticalAirflow::Position4;

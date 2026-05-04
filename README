@@ -19,4 +19,4 @@ The accessory will present two "Fans" - the first one controls the actual fan sp
 
 "Off" for Fan 1 maps to "auto" mode on the Fujitsu.
 
-"100%" for Fan 2 maps to "swing" for vanes. This is done because the "oscillate" control isn't accessible with grouped accessories in HomeKit. 
+"Off" for Fan 2 maps to "swing" for vanes. This is done because the "oscillate" control isn't accessible with grouped accessories in HomeKit. 
