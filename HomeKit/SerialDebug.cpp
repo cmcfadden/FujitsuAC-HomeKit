@@ -6,10 +6,10 @@
   HomeSpan's built-in serial interface (W=WiFi, S=setup code, etc.).
 
   Custom commands (type letter then press Enter):
-        X         Dump current AC status
-        Y         Dump all registers
-        Y xxxx    Dump specific register (hex address, e.g. Y 1000)
-        Z         Toggle live register-change logging
+        @X         Dump current AC status
+        @Y         Dump all registers
+        @Y xxxx    Dump specific register (hex address, e.g. Y 1000)
+        @Z         Toggle live register-change logging
 
   Project home: https://github.com/Benas09/FujitsuAC
 */

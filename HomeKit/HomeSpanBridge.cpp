@@ -361,7 +361,7 @@ namespace FujitsuAC {
         if (speed->updated()) {
             int pct = speed->getNewVal();
 
-            // 100% = swing mode; everything else = fixed position.
+            // 0% = swing mode; everything else = fixed position.
             // NOTE: The controller has a single-use send queue — only one
             // command can be queued per loop tick.  setVerticalAirflow()
             // already sends swing=Off + position in one atomic batch,
