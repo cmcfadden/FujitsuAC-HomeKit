@@ -263,16 +263,21 @@ namespace FujitsuAC {
         this->noResponseNotified = false;
 
         if (FrameType::Init1 == this->lastFrameSent) {
-            uint8_t expectedResponseAfterRestart[8] = {0xFE, 0x00, 0x00, 0x00, 0x01, 0x02, 0xFE, 0xFE};
+            static const uint8_t expectedResponseAfterRestart[][8] = {
+                {0xFE, 0x00, 0x00, 0x00, 0x01, 0x02, 0xFE, 0xFE},
+                {0xFC, 0x00, 0x00, 0x00, 0x01, 0x02, 0xFF, 0x00}
+            };
 
-            if (
-                size == sizeof(expectedResponseAfterRestart) 
-                && memcmp(buffer, expectedResponseAfterRestart, sizeof(expectedResponseAfterRestart)) == 0
-            ) {
-                // wait real initialization frame
-                this->debug("received", this->toHexStr(buffer, size));
+            for (size_t i = 0; i < sizeof(expectedResponseAfterRestart) / sizeof(expectedResponseAfterRestart[0]); i++) {
+                if (
+                    size == 8 &&
+                    memcmp(buffer, expectedResponseAfterRestart[i], 8) == 0
+                ) {
+                    // wait real initialization frame
+                    this->debug("received", this->toHexStr(buffer, size));
 
-                return;
+                    return;
+                }
             }
 
             uint8_t expectedResponse[8] = {0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0xFF, 0xFD};
@@ -280,6 +285,7 @@ namespace FujitsuAC {
             if (size != sizeof(expectedResponse) || memcmp(buffer, expectedResponse, sizeof(expectedResponse)) > 0) {
                 this->debug("received", this->toHexStr(buffer, size));
                 this->debug("error", "Unexpected response. Terminate");
+                this->debug("status", "Terminated Init1");
 
                 this->terminated = true;
             } else {
@@ -295,6 +301,7 @@ namespace FujitsuAC {
             if (size != sizeof(expectedResponse) || memcmp(buffer, expectedResponse, sizeof(expectedResponse)) > 0) {
                 this->debug("received", this->toHexStr(buffer, size));
                 this->debug("error", "Unexpected response. Terminate");
+                this->debug("status", "Terminated Init2");
 
                 this->terminated = true;
             } else {
