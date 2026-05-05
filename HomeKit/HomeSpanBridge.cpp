@@ -166,12 +166,13 @@ namespace FujitsuAC {
     //  Fan
     // ═══════════════════════════════════════════════════════════════
 
-    FujitsuFan::FujitsuFan(FujitsuController *ctrl, bool enableSwing)
+    FujitsuFan::FujitsuFan(FujitsuController *ctrl, bool enableSwing, const char *serviceName)
         : Service::Fan()
     {
         controller = ctrl;
         exposeSwing = enableSwing;
 
+        new Characteristic::ConfiguredName(serviceName);
         active = new Characteristic::Active(0);
         speed  = new Characteristic::RotationSpeed(0);
         speed->setRange(0, 80, 20);           // 0,20,40,60,80 → Auto / Quiet / Low / Medium / High
@@ -339,12 +340,13 @@ namespace FujitsuAC {
     //  Vane Position (Fan service hack)
     // ═══════════════════════════════════════════════════════════════
 
-    FujitsuVane::FujitsuVane(FujitsuController *ctrl, bool vertical)
+    FujitsuVane::FujitsuVane(FujitsuController *ctrl, bool vertical, const char *serviceName)
         : Service::Fan()
     {
         controller = ctrl;
         isVertical = vertical;
 
+        new Characteristic::ConfiguredName(serviceName);
         active = new Characteristic::Active(0);
         speed = new Characteristic::RotationSpeed(50);
         speed->setRange(0, 100, 25);   // 0,25,50,75 = positions 1-4, 0 = swing
@@ -507,8 +509,8 @@ namespace FujitsuAC {
                 new Characteristic::FirmwareRevision(version);
 
             new FujitsuThermostat(&controller);
-            new FujitsuFan(&controller, false);
-            new FujitsuVane(&controller, true);
+            new FujitsuFan(&controller, false, "Fan");
+            new FujitsuVane(&controller, true, "Vertical Vane");
 
 #if FUJITSU_ENABLE_OUTDOOR_TEMP
         // ── Accessory 2: Outdoor Temperature ──────────────────────

@@ -62,7 +62,7 @@ namespace FujitsuAC {
         uint16_t lastFan   = 0xFFFF;
         uint16_t lastSwing = 0xFFFF;
 
-        FujitsuFan(FujitsuController *ctrl, bool enableSwing = true);
+        FujitsuFan(FujitsuController *ctrl, bool enableSwing = true, const char *serviceName = "Fan");
         boolean update() override;
         void loop() override;
 
@@ -117,7 +117,7 @@ namespace FujitsuAC {
         uint16_t pendingAirflow = 0xFFFF;
         uint32_t pendingSinceMs = 0;
 
-        FujitsuVane(FujitsuController *ctrl, bool vertical);
+        FujitsuVane(FujitsuController *ctrl, bool vertical, const char *serviceName = "Vane");
         boolean update() override;
         void loop() override;
 
